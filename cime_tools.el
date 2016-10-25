@@ -12,14 +12,29 @@
 ;; moves the point to the beginning of the matching test; if no match is found,
 ;; prints an error message.
 ;;
-;; The inclusion of machine_compiler in the search string is optional.
+;; For a test without a testmods directory, machine_compiler is optional (and in
+;; fact is ignored). Thus, the search string can be of the form:
 ;;
-;; If the test has a testmods directory, then the search string must include
-;; this testmods directory; however, the search string should use '-' rather
-;; than '/' as a directory separator (i.e., the search string should match the
-;; standard format of condensed/dotted test names in this respect).
+;;   name.grid.compset
 ;;
-;; If a region is selected, then only searches in the selected region.
+;; or
+;;
+;;   name.grid.compset.machine_compiler
+;;
+;; For a test with a testmods directory, both machine_compiler and testmods must
+;; be given. machine_compiler is ignored, but is required to avoid ambiguity. So
+;; the search string must be of the form:
+;;
+;;   name.grid.compset.machine_compiler.testmods
+;;
+;; but you may give some dummy machine_compiler (like 'foo').
+;;
+;; If the test has a testmods directory, then the search string should use '-'
+;; rather than '/' as a directory separator (i.e., the search string should
+;; match the standard format of condensed/dotted test names in this respect).
+;;
+;; If a region is selected, then the function only searches in the selected
+;; region.
 ;;
 ;; Examples:
 ;;
@@ -28,11 +43,15 @@
 ;;   <test name="ERI_D" grid="T31_g37_rx1" compset="A">
 ;;
 ;; - With testmods directory:
-;;   ERR_N3.f19_g16.B1850.allactive-defaultio or
-;;   ERR_N3.f19_g16.B1850.yellowstone_intel.allactive-defaultio will find this line:
+;;   ERR_N3.f19_g16.B1850.yellowstone_intel.allactive-defaultio (or
+;;   ERR_N3.f19_g16.B1850.foo.allactive-defaultio) will find this line:
 ;;   <test name="ERR_N3" grid="f19_g16" compset="B1850" testmods="allactive/defaultio">
-;; ------------------------------------------------------------------------
+;;   ------------------------------------------------------------------------
 
+;; Note that, even with optional components, component N can only be present if
+;; components 1..N-1 are all present, in order to avoid ambiguity. So, in the
+;; settings below, you can only have a testmods present in the search string if
+;; mach_comp is also present.
 (defvar test-search-order
   (list (cons (make-symbol "name") t)
         (cons (make-symbol "grid") t)
@@ -137,20 +156,6 @@
     (re-search-forward "</[[:space:]]*test[[:space:]]*>" end t)
     ))
 
-(defun testmods-entry-p (str)
-  "Return t iff str looks like a testmod entry (two strings separated by
-   a hyphen with the first the name of a testmods directory under current
-   buffer"
-  (let* ((items (split-string  str "-"))
-         (num-items (length items))
-         (curdir (file-name-directory (buffer-file-name (current-buffer)))))
-    (if (eq num-items 2)
-        (file-exists-p
-         (concat curdir (file-name-as-directory "testmods_dirs")
-                 (file-name-as-directory (car items)) (cadr items)))
-      nil)
-    ))
-
 (defun find-cime-test (test-name)
   "Find a test in a CIME testlist XML file"
   (interactive
@@ -181,14 +186,9 @@
             ((string= (symbol-name (car (nth i test-search-order))) "testmods")
              (setq testmods-pos i))
             ))
-    ;; Process the required arguments
-    (dolist (i (number-sequence 0 (1- num-req)))
+    ;; Process all arguments
+    (dolist (i (number-sequence 0 (1- (length search-items))))
       (set (car (nth i test-search-order)) (nth i search-items))
-      )
-    ;; Process any optional arguments
-    (dolist (i (number-sequence num-req (1- (length search-items))))
-      (if (testmods-entry-p (nth i search-items))
-          (set (car (nth testmods-pos test-search-order)) (nth i search-items)))
       )
     ;; Reset search-items to be canonical order (name grid compset testmods)
     (setq search-items
